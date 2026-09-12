@@ -4,3 +4,4 @@ celery==5.4.0
 redis==5.2.1
 django-celery-beat==2.7.0
 gunicorn==23.0.0
+djangorestframework==3.15.2

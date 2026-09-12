@@ -60,6 +60,62 @@ docker compose up --build
 - расписание: на каждый `Source` заводится `PeriodicTask` с его `fetch_interval_minutes`
   (дефолт 30), видно в админке django-celery-beat.
 
+## API
+
+- `GET /api/vacancies` — список с пагинацией по 50. Фильтры: `source` (slug), `remote=1`,
+  `salary_min`, `salary_max`, `q` (поиск по заголовку и компании).
+- `GET /api/vacancies/<id>` — деталь вакансии.
+- `GET /api/sources` — источники с последними пятью запусками и их счётчиками.
+
+### N+1
+
+Сериализатор вакансии отдаёт slug источника. На наивном queryset это ровно та самая
+проблема: один запрос на список плюс по одному на каждую строку.
+
+| queryset | SQL-запросов на 100 вакансий |
+|---|---|
+| `Vacancy.objects.all()` | **101** |
+| `Vacancy.objects.select_related("source")` | **1** |
+
+На реальной ручке `GET /api/vacancies?source=seed1` выходит 2 запроса на страницу в 50 строк:
+один на `COUNT` для пагинации, один на данные. `GET /api/sources` — 3 запроса независимо
+от числа источников: источники, их последние запуски через `prefetch_related` и `COUNT`.
+
+### Индекс
+
+Замеры на 50 000 вакансиях по четырём источникам (`manage.py seed_vacancies --count 50000`).
+
+Существующие `idx_vacancy_source_active` и `idx_vacancy_published_at` покрывают выборку
+активных вакансий источника и сортировку по дате публикации. Не покрыт был другой частый
+запрос: удалёнка одного источника, отсортированная по верхней границе зарплаты.
+
+```sql
+SELECT id, title, salary_max FROM collector_vacancy
+WHERE source_id = %s AND is_remote = true
+ORDER BY salary_max DESC LIMIT 50;
+```
+
+ДО индекса — `Bitmap Heap Scan` по FK, 7439 строк подняты с диска и досортированы
+`top-N heapsort`:
+
+```
+Sort Method: top-N heapsort  Memory: 30kB
+->  Bitmap Heap Scan on collector_vacancy (actual time=0.270..1.618 rows=7439 loops=1)
+      Rows Removed by Filter: 5061
+Execution Time: 2.261 ms
+```
+
+ПОСЛЕ `models.Index(fields=["source", "is_remote", "-salary_max"])` сортировка исчезла,
+читаются ровно 50 строк по индексу:
+
+```
+->  Index Scan using idx_vacancy_source_remote_sal on collector_vacancy (actual time=0.008..0.022 rows=50 loops=1)
+      Index Cond: ((source_id = $0) AND (is_remote = true))
+Execution Time: 0.034 ms
+```
+
+**2.261 мс → 0.034 мс**, в 66 раз.
+
 ## Идемпотентность
 
 На `Vacancy` и `RawItem` висит `UniqueConstraint` по паре `(source, external_id)`
