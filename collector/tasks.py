@@ -38,14 +38,25 @@ def fetch_source(self, source_id):
 
 def _fetch(task, source_id):
     source = Source.objects.get(pk=source_id)
-    run = ImportRun.objects.create(source=source)
     attempt = task.request.retries + 1
+    # ImportRun это запуск сбора, а не попытка HTTP: на ретрае подхватываем свой же незакрытый run,
+    # иначе одна неудачная выкачка давала бы четыре строки failed и врала в статистике источника
+    run = None
+    if task.request.retries:
+        run = ImportRun.objects.filter(source=source, status=ImportRun.Status.RUNNING).order_by("-id").first()
+    if run is None:
+        run = ImportRun.objects.create(source=source)
+    run.attempts = attempt
+    run.save(update_fields=["attempts"])
+
     try:
         items = get_transport(source).fetch(source)
     except (RetryableError, FatalError) as exc:
-        run.status = ImportRun.Status.FAILED
-        run.error = f"попытка {attempt}: {exc}"
-        run.finished_at = timezone.now()
+        run.error = (run.error + f"\nпопытка {attempt}: {exc}").strip()
+        # статус failed только когда повторять больше нечем: до этого запуск ещё идёт
+        if isinstance(exc, FatalError) or attempt > task.max_retries:
+            run.status = ImportRun.Status.FAILED
+            run.finished_at = timezone.now()
         run.save(update_fields=["status", "error", "finished_at"])
         log.error("fetch_source: источник %s, попытка %s: %s", source.slug, attempt, exc)
         raise

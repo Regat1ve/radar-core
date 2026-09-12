@@ -27,6 +27,7 @@ class ImportRun(models.Model):
     status = models.CharField(max_length=16, choices=Status, default=Status.RUNNING)
     started_at = models.DateTimeField(auto_now_add=True)
     finished_at = models.DateTimeField(null=True, blank=True)
+    attempts = models.PositiveIntegerField(default=1)
     fetched_count = models.PositiveIntegerField(default=0)
     created_count = models.PositiveIntegerField(default=0)
     duplicate_count = models.PositiveIntegerField(default=0)
@@ -77,6 +78,9 @@ class Vacancy(models.Model):
         indexes = [
             models.Index(fields=["source", "is_active"], name="idx_vacancy_source_active"),
             models.Index(fields=["-published_at"], name="idx_vacancy_published_at"),
+            # фильтр по источнику с удалёнкой и сортировкой по зарплате: без него планировщик
+            # брал bitmap scan по FK и досортировывал тысячи строк top-N heapsort
+            models.Index(fields=["source", "is_remote", "-salary_max"], name="idx_vacancy_source_remote_sal"),
         ]
         verbose_name_plural = "vacancies"
 
