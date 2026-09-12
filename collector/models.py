@@ -1,4 +1,8 @@
+import json
+
 from django.db import models
+from django.db.models.signals import post_delete, post_save
+from django.dispatch import receiver
 
 
 class Source(models.Model):
@@ -78,3 +82,29 @@ class Vacancy(models.Model):
 
     def __str__(self):
         return f"{self.title} @ {self.company}"
+
+
+@receiver(post_save, sender=Source)
+def sync_schedule(sender, instance, **kwargs):
+    """Каждый источник опрашивается по своему интервалу: расписание beat живёт в БД."""
+    from django_celery_beat.models import IntervalSchedule, PeriodicTask
+
+    schedule, _ = IntervalSchedule.objects.get_or_create(
+        every=instance.fetch_interval_minutes, period=IntervalSchedule.MINUTES
+    )
+    PeriodicTask.objects.update_or_create(
+        name=f"fetch_source:{instance.slug}",
+        defaults={
+            "task": "collector.tasks.fetch_source",
+            "interval": schedule,
+            "args": json.dumps([instance.pk]),
+            "enabled": instance.is_enabled,
+        },
+    )
+
+
+@receiver(post_delete, sender=Source)
+def drop_schedule(sender, instance, **kwargs):
+    from django_celery_beat.models import PeriodicTask
+
+    PeriodicTask.objects.filter(name=f"fetch_source:{instance.slug}").delete()

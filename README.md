@@ -24,6 +24,13 @@ docker compose up --build
    списки запусков и вакансий пустые.
 8. Идемпотентность: две вакансии с одинаковой парой (source, external_id) создать нельзя,
    вторая падает с ошибкой уникальности. Это констрейнт в БД, а не проверка в коде.
+9. Сбор: заведите источник с `base_url` = `stub://5` и запустите
+   `docker compose exec web python manage.py shell -c "from collector.tasks import fetch_source; fetch_source.delay(1)"`.
+   В админке появится `ImportRun` со статусом success и пять вакансий.
+10. Повторите пункт 9: число вакансий не изменится, у нового `ImportRun` будет
+    `created_count = 0` и `duplicate_count = 5`.
+11. В админке django-celery-beat видна периодическая задача `fetch_source:<slug>`
+    с интервалом источника.
 
 ## Конфигурация
 
@@ -34,6 +41,24 @@ docker compose up --build
 
 - `config/` — настройки Django, URL-роутинг, Celery-приложение
 - `collector/` — модели сбора: `Source`, `ImportRun`, `RawItem`, `Vacancy`
+
+## Сбор
+
+`collector.tasks.fetch_source(source_id)` ходит в источник, пишет `ImportRun` и сырые позиции
+в `RawItem`, затем ставит `normalize_run`, который раскладывает их в `Vacancy`.
+
+- транспорт вынесен в `collector/transport.py`: `HttpTransport` для реальных источников,
+  `StubTransport` для источников с `base_url` вида `stub://5` (выдаёт 5 позиций без сети);
+- таймаут HTTP 10 секунд; 429 и 5xx это `RetryableError`, остальные 4xx это `FatalError` без повторов;
+- ретраи: `autoretry_for`, `retry_backoff=2`, `retry_jitter=True`, не больше 3 повторов.
+  Джиттер намеренно размывает интервал внутри растущей границы (2, 4, 8 секунд), чтобы
+  пачка источников не ломилась в сеть одновременно;
+- `acks_late` и `reject_on_worker_lost` включены, `worker_prefetch_multiplier=1`:
+  задача упавшего воркера возвращается в очередь, а не теряется;
+- лок на источник: `cache.add` поверх Redis (`SET NX EX`, TTL 10 минут). Второй запуск того же
+  источника завершается сразу со значением `locked` и не создаёт второй `ImportRun`;
+- расписание: на каждый `Source` заводится `PeriodicTask` с его `fetch_interval_minutes`
+  (дефолт 30), видно в админке django-celery-beat.
 
 ## Идемпотентность
 
