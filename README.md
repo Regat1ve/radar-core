@@ -20,6 +20,10 @@ docker compose up --build
 4. `docker compose logs worker` — строка `celery@... ready.`
 5. `docker compose logs beat` — строка `beat: Starting...`
 6. Отказ БД виден: `docker compose stop db`, затем `/health` отдаёт `status: error` и код 503.
+7. В админке есть четыре модели: Source, ImportRun, RawItem, Vacancy. Создайте источник,
+   списки запусков и вакансий пустые.
+8. Идемпотентность: две вакансии с одинаковой парой (source, external_id) создать нельзя,
+   вторая падает с ошибкой уникальности. Это констрейнт в БД, а не проверка в коде.
 
 ## Конфигурация
 
@@ -29,4 +33,10 @@ docker compose up --build
 ## Структура
 
 - `config/` — настройки Django, URL-роутинг, Celery-приложение
-- `collector/` — приложение сбора; модели появятся в фазе 02
+- `collector/` — модели сбора: `Source`, `ImportRun`, `RawItem`, `Vacancy`
+
+## Идемпотентность
+
+На `Vacancy` и `RawItem` висит `UniqueConstraint` по паре `(source, external_id)`
+(`uniq_vacancy_source_external_id`, `uniq_rawitem_source_external_id`). Повторный импорт
+не может создать дубль даже при гонке двух воркеров: это гарантия БД, а не кода.
