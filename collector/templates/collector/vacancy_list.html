@@ -1,0 +1,86 @@
+{% extends "collector/base.html" %}
+{% block title %}Вакансии — radar-core{% endblock %}
+{% block content %}
+<form class="row g-2 mb-3" method="get">
+  <div class="col-12 col-md-3">
+    <input class="form-control" type="search" name="q" value="{{ filters.q|default:'' }}" placeholder="Заголовок или компания">
+  </div>
+  <div class="col-6 col-md-2">
+    <select class="form-select" name="source">
+      <option value="">Все источники</option>
+      {% for s in sources %}
+        <option value="{{ s.slug }}" {% if filters.source == s.slug %}selected{% endif %}>{{ s.slug }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-6 col-md-2">
+    <input class="form-control" type="number" name="salary_min" value="{{ filters.salary_min|default:'' }}" placeholder="Зарплата от">
+  </div>
+  <div class="col-6 col-md-2">
+    <input class="form-control" type="number" name="salary_max" value="{{ filters.salary_max|default:'' }}" placeholder="Зарплата до">
+  </div>
+  <div class="col-6 col-md-2 d-flex align-items-center">
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" name="remote" id="remote" {% if filters.remote %}checked{% endif %}>
+      <label class="form-check-label" for="remote">Только удалёнка</label>
+    </div>
+  </div>
+  <div class="col-12 col-md-1 d-grid">
+    <button class="btn btn-primary" type="submit">Фильтр</button>
+  </div>
+</form>
+
+<p class="text-body-secondary small">Найдено: {{ page.paginator.count }}</p>
+
+<div class="table-responsive">
+  <table class="table table-striped table-hover align-middle bg-body">
+    <thead>
+      <tr>
+        <th>Вакансия</th><th>Компания</th><th>Вилка</th>
+        <th>Источник</th><th>Опубликована</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for v in page %}
+      <tr>
+        <td>
+          {{ v.title }}
+          {% if v.is_remote %}<span class="badge text-bg-info">удалённо</span>{% endif %}
+          {% if v.is_suspected_scam %}<span class="badge text-bg-danger">подозрение на скам</span>{% endif %}
+        </td>
+        <td>{{ v.company|default:"—" }}</td>
+        <td class="text-nowrap">
+          {% if v.salary_min or v.salary_max %}
+            {{ v.salary_min|default:"" }}{% if v.salary_min and v.salary_max %}–{% endif %}{{ v.salary_max|default:"" }}
+            {{ v.salary_currency }}
+          {% else %}—{% endif %}
+        </td>
+        <td><span class="badge text-bg-secondary">{{ v.source.slug }}</span></td>
+        <td class="text-nowrap">{{ v.published_at|date:"d.m.Y"|default:"—" }}</td>
+        <td><a class="btn btn-sm btn-outline-primary" href="{{ v.url }}" rel="noopener">Открыть</a></td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="6" class="text-center text-body-secondary py-4">Ничего не найдено</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if page.paginator.num_pages > 1 %}
+<nav>
+  <ul class="pagination">
+    {% if page.has_previous %}
+      <li class="page-item"><a class="page-link" href="?{{ params }}&page={{ page.previous_page_number }}">Назад</a></li>
+    {% else %}
+      <li class="page-item disabled"><span class="page-link">Назад</span></li>
+    {% endif %}
+    <li class="page-item disabled"><span class="page-link">{{ page.number }} из {{ page.paginator.num_pages }}</span></li>
+    {% if page.has_next %}
+      <li class="page-item"><a class="page-link" href="?{{ params }}&page={{ page.next_page_number }}">Вперёд</a></li>
+    {% else %}
+      <li class="page-item disabled"><span class="page-link">Вперёд</span></li>
+    {% endif %}
+  </ul>
+</nav>
+{% endif %}
+{% endblock %}

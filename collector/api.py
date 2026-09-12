@@ -1,7 +1,7 @@
-from django.db.models import Q
 from rest_framework import generics, serializers
 
 from .models import ImportRun, Source, Vacancy
+from .queries import filter_vacancies
 
 
 class VacancySerializer(serializers.ModelSerializer):
@@ -36,20 +36,7 @@ class VacancyList(generics.ListAPIView):
     serializer_class = VacancySerializer
 
     def get_queryset(self):
-        # select_related убирает N+1: без него сериализатор дёргает Source на каждую строку
-        qs = Vacancy.objects.select_related("source")
-        p = self.request.query_params
-        if p.get("source"):
-            qs = qs.filter(source__slug=p["source"])
-        if p.get("remote") in ("1", "true"):
-            qs = qs.filter(is_remote=True)
-        if p.get("salary_min"):
-            qs = qs.filter(salary_max__gte=p["salary_min"])
-        if p.get("salary_max"):
-            qs = qs.filter(salary_min__lte=p["salary_max"])
-        if p.get("q"):
-            qs = qs.filter(Q(title__icontains=p["q"]) | Q(company__icontains=p["q"]))
-        return qs.order_by("-published_at", "-id")
+        return filter_vacancies(self.request.query_params)
 
 
 class VacancyDetail(generics.RetrieveAPIView):

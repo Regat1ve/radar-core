@@ -1,0 +1,53 @@
+{% extends "collector/base.html" %}
+{% block title %}Источники — radar-core{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Состояние источников</h1>
+<div class="table-responsive">
+  <table class="table table-hover align-middle bg-body">
+    <thead>
+      <tr>
+        <th>Источник</th><th>Статус</th><th>Последний запуск</th><th>Успешный сбор</th>
+        <th>Собрано</th><th>Создано</th><th>Дублей</th><th>Опрос</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for s in sources %}
+      {% with run=s.last.0 %}
+      <tr>
+        <td>
+          <strong>{{ s.slug }}</strong><br>
+          <span class="text-body-secondary small">{{ s.name }}</span>
+        </td>
+        <td>
+          {% if not s.is_enabled %}<span class="badge text-bg-secondary">выключен</span>{% endif %}
+          {% if run.status == "success" %}
+            <span class="badge text-bg-success">успех</span>
+          {% elif run.status == "failed" %}
+            <span class="badge text-bg-danger">ошибка</span>
+          {% elif run.status == "running" %}
+            <span class="badge text-bg-warning">идёт сбор</span>
+          {% else %}
+            <span class="badge text-bg-light">не запускался</span>
+          {% endif %}
+          {% if run.attempts > 1 %}<span class="badge text-bg-warning">попыток: {{ run.attempts }}</span>{% endif %}
+        </td>
+        <td class="text-nowrap">{{ run.started_at|date:"d.m.Y H:i"|default:"—" }}</td>
+        <td class="text-nowrap">{{ s.last_success_at|date:"d.m.Y H:i"|default:"—" }}</td>
+        <td>{% if run %}{{ run.fetched_count }}{% else %}—{% endif %}</td>
+        <td>{% if run %}{{ run.created_count }}{% else %}—{% endif %}</td>
+        <td>{% if run %}{{ run.duplicate_count }}{% else %}—{% endif %}</td>
+        <td class="text-nowrap">каждые {{ s.fetch_interval_minutes }} мин</td>
+      </tr>
+      {% if run.error %}
+      <tr class="table-danger">
+        <td colspan="8"><pre class="mb-0 small text-wrap">{{ run.error }}</pre></td>
+      </tr>
+      {% endif %}
+      {% endwith %}
+    {% empty %}
+      <tr><td colspan="8" class="text-center text-body-secondary py-4">Источников пока нет</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
