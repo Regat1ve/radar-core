@@ -7,3 +7,4 @@ gunicorn==23.0.0
 djangorestframework==3.15.2
 pytest==8.3.4
 pytest-django==4.9.0
+whitenoise==6.8.2

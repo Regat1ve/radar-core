@@ -8,3 +8,4 @@ venv/
 staticfiles/
 .idea/
 .vscode/
+staticfiles/
