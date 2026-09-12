@@ -2,6 +2,9 @@ name: radar-core
 
 x-app: &app
   build: .
+  # один образ на web, worker и beat: иначе rebuild одного сервиса оставляет два других
+  # на старом образе, и воркер падает на модуле, который есть только в web
+  image: radar-core-app
   env_file: .env
   volumes:
     - .:/app
