@@ -55,4 +55,8 @@ jobs:
 
       - run: python manage.py migrate --noinput
 
+      # манифест статики нужен до тестов: ManifestStaticFilesStorage ищет в нём
+      # каждый файл из {% static %}, и без collectstatic страницы падают с 500
+      - run: python manage.py collectstatic --noinput
+
       - run: pytest
