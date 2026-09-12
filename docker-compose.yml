@@ -43,6 +43,13 @@ services:
              python manage.py runserver 0.0.0.0:8000"
     ports:
       - "8000:8000"
+    # сервер слушает только после migrate, поэтому healthy здесь означает «миграции применены»
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
 
   worker:
     <<: *app
@@ -50,6 +57,14 @@ services:
 
   beat:
     <<: *app
+    # beat читает таблицы django_celery_beat, поэтому ждёт не только БД, но и применённых миграций
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
     command: celery -A config beat -l info
 
 volumes:
